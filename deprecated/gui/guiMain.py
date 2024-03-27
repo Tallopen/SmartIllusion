@@ -844,6 +844,7 @@ class GUIMain(QMainWindow):
         video_root_path = QFileDialog.getExistingDirectory(self, "Generate Video")
         if video_root_path and video_root_path is not None:
             for track_id, track in enumerate(self.project.tracks):
+                t_p = []
                 _l = self.get_track_length(track_id)
                 _sn = int(_l / VIDEO_SAMPLE_RATE)    # sample number
 
@@ -852,6 +853,8 @@ class GUIMain(QMainWindow):
 
                 for _sn_i in range(_sn):
                     lp = self.find_latent_position_given_track_position(_sn_i / (_sn+1), track_id)
+                    t_p.append(lp)
+
                     img = self.estimate_latent_scene(lp)*200
                     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
@@ -861,6 +864,7 @@ class GUIMain(QMainWindow):
                     out.write(img)
 
                 out.release()
+                scio.savemat("temp.mat", {'track_latent': np.array(t_p)})
 
     def load_videos(self):
         video_root_path = QFileDialog.getExistingDirectory(self, "Generate Video")
@@ -884,7 +888,6 @@ class Project:
         self.tracks = []
 
     def new_track(self):
-
         self.tracks.append([])
 
     def replace_point(self, track_id, point_id, new_value):
