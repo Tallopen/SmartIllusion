@@ -19,7 +19,7 @@ import socket, math
 
 LOCAL_IP = "127.0.0.1"
 FRAME_CUT = 180
-VIDEO_SAMPLE_RATE = 1
+VIDEO_SAMPLE_RATE = 10
 
 POSITION_UDP = 4515
 REWARD_UDP = 4516
@@ -75,6 +75,8 @@ class RunnerUI(QMainWindow):
         self.setWindowTitle(u"SmartIllusion Control")
         self.runButton.setText(u"Run")
         self.terminateButton.setText(u"Terminate")
+
+        self.last_time = 0
 
         self.vision = {}
         self.audio = {}
@@ -170,17 +172,22 @@ class RunnerUI(QMainWindow):
         self.instruction_thread = InstructionThread()
         self.speed_thread = SpeedThread()
 
+        self.last_time = time.time()
         self.speed_thread.speed_received.connect(self.speed_received)
         self.instruction_thread.instruction_received.connect(self.instruction_received)
 
         self.instruction_thread.start()
         self.speed_thread.start()
-        self.sound_player.start()
+        if self.sound_player:
+            self.sound_player.start()
 
     def speed_received(self, speed):
         if self.current_track_id is not None:
-            self.position += speed * VIDEO_SAMPLE_RATE
-            img_switch = max(0, int(self.position / VIDEO_SAMPLE_RATE))
+            _new_time = time.time()
+            delta_time = _new_time - self.last_time
+            self.last_time = _new_time
+            self.position += speed * VIDEO_SAMPLE_RATE * delta_time
+            img_switch = max(0, int(self.position))
 
             if img_switch >= len(self.vision[self.current_track_id][self.current_comb_id]):
                 if self.vision:
@@ -196,12 +203,14 @@ class RunnerUI(QMainWindow):
             else:
                 if self.vision:
                     current_img = self.vision[self.current_track_id][self.current_comb_id][img_switch]
-                    q_image = QImage(current_img.data, current_img.shape[1], current_img.shape[0], current_img.strides[0], QImage.Format.Format_RGB888)
+                    q_image = QImage(current_img.data, current_img.shape[1], current_img.shape[0], current_img.strides[0], QImage.Format.Format_BGR888)
                     self.nav_displayer.setPixmap(QPixmap(q_image))
                 if self.audio:
                     self.sound_player.update_new_signal(self.audio[self.current_track_id][self.current_comb_id][img_switch])
 
                 self.client_socket_p.sendto(f"0,{round(self.position, 2)}".encode(encoding="utf8"), self.position_socket)
+        else:
+            self.last_time = time.time()
 
     def instruction_received(self, message):
         message = message.split(',')
@@ -233,7 +242,7 @@ class SoundPlayer(QThread):
     def __init__(self):
         super(SoundPlayer, self).__init__()
         self.step_size = 4096
-        self.blank_signal = np.zeros([4096, 1])
+        self.blank_signal = np.zeros([self.step_size, 1])
         self.signal = self.blank_signal
         self.is_running = False
 
@@ -249,7 +258,7 @@ class SoundPlayer(QThread):
     def run(self):
         self.is_running = True
         event = threading.Event()
-        stream = sd.OutputStream(samplerate=192000, blocksize=self.step_size,
+        stream = sd.OutputStream(samplerate=48000, blocksize=self.step_size,
                                  device=1, channels=1,
                                  callback=self.get_data, finished_callback=event.set)
         with stream:

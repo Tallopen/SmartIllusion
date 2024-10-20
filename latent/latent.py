@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 from collections import Counter
-import cv2
+import cv2, tqdm
 
 
 class LatentSpace:
@@ -136,10 +136,13 @@ class LatentSpace:
 
         latent_positions = []
 
-        for _sn_i in range(_sn):
+        for _sn_i in tqdm.tqdm(range(_sn)):
             lp = self.find_latent_position_given_track_position(_sn_i / (_sn + 1), pts)
             latent_positions.append(lp)
-        _g = self.estimate_latent_scene(ae, latent_positions, upscaler).numpy()
+        try:
+            _g = self.estimate_latent_scene(ae, latent_positions, upscaler).numpy()
+        except AttributeError:
+            _g = self.estimate_latent_scene(ae, latent_positions, upscaler)
 
         if option == "mnist":
             n = _g.shape[0]
@@ -159,5 +162,13 @@ class LatentSpace:
                 black_images[i, 32:224, 424:616, 2] = 255 - gray_img_resized_rgb[:, :, 2]
 
             _g = black_images
+
+        else:
+
+            n = _g.shape[0]
+            for i in range(n):
+                gray_img = _g[i] * 120
+                gray_img[gray_img>255] = 255
+                _g[i] = gray_img
 
         return _g, latent_positions
